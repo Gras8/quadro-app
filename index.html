@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quadro — Budget Marco</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#16233B">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Quadro<span>.</span> Budget &amp; cuscinetto</h1>
+    <div class="sub">Trascina gli estratti conto: pensa a tutto lui. Dati salvati automaticamente.</div>
+  </div>
+  <div id="savestate">—</div>
+</header>
+
+<div id="loading">Caricamento dati…</div>
+<div id="app" style="display:none">
+
+<section>
+  <label class="drop" id="drop">
+    <span class="badge">IMPORT</span>
+    <span><b>Trascina qui</b> l'estratto BPER (PDF), la Lista Movimenti (XLS) e/o il Download.CSV di PayPal — oppure clicca per scegliere i file. I doppioni vengono scartati da soli.</span>
+    <input type="file" id="fileinput" multiple accept=".pdf,.csv,.xls,.xlsx,.PDF,.CSV,.XLS,.XLSX">
+  </label>
+  <div id="importlog"></div>
+  <details style="margin-top:10px">
+    <summary style="cursor:pointer;font-size:13px;color:var(--mist)">Aggiungi movimento a mano (spese in contanti, fuori conto)</summary>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+      <input id="man-d" type="text" placeholder="gg/mm/aa" style="width:90px;font-family:var(--mono);padding:6px;border:1px solid var(--line);border-radius:5px" aria-label="Data">
+      <select id="man-s" style="padding:6px;border:1px solid var(--line);border-radius:5px" aria-label="Segno"><option value="D">Uscita</option><option value="A">Entrata</option></select>
+      <input id="man-a" type="number" step="0.5" min="0" placeholder="importo" style="width:100px;font-family:var(--mono);padding:6px;border:1px solid var(--line);border-radius:5px" aria-label="Importo">
+      <input id="man-x" type="text" placeholder="descrizione (es. AFFITTO contanti gennaio)" style="flex:1;min-width:200px;padding:6px;border:1px solid var(--line);border-radius:5px" aria-label="Descrizione">
+      <button class="btn" id="man-add">Aggiungi</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--mist);margin-top:6px">La categoria viene assegnata dalle regole (es. la parola AFFITTO va in "Affitto (chiuso)"); correggibile poi dalla matrice come ogni movimento.</div>
+  </details>
+</section>
+
+<section>
+  <h2>Cuscinetto — Fase 1</h2>
+  <div class="hint">La pallina corre verso la rete: obiettivo 6.000 €. Cuscinetto netto = Trade Republic + eccedenza del conto sopra soglia operativa e fondi già impegnati (mobili). Il saldo conto si aggiorna da solo caricando la Lista Movimenti.</div>
+  <div class="court-wrap">
+    <div class="court" id="court" role="img" aria-label="Avanzamento cuscinetto">
+      <div class="fill" id="cfill"></div>
+      <div class="chalk" style="left:25%"></div>
+      <div class="chalk mid" style="left:50%"></div>
+      <div class="chalk" style="left:75%"></div>
+      <div class="net"></div>
+      <div class="ball" id="cball" style="left:0%"></div>
+      <div class="label">0 €</div>
+      <div class="goal" id="cgoal">6.000 €</div>
+    </div>
+    <div class="cushion-nums">
+      <div class="cn"><b id="n-netto">—</b><small>Cuscinetto netto</small></div>
+      <div class="cn"><b class="pct" id="n-pct">—</b><small>dell'obiettivo</small></div>
+      <div class="cn"><b id="n-manca">—</b><small>Mancano</small></div>
+    </div>
+  </div>
+  <div class="cushion-in">
+    <div><label for="in-tr">Saldo Trade Republic</label><input id="in-tr" type="number" step="10" min="0"></div>
+    <div><label for="in-cc">Saldo conto corrente</label><input id="in-cc" type="number" step="10" min="0"></div>
+    <div><label for="in-imp">Impegnati (mobili, in uscita)</label><input id="in-imp" type="number" step="100" min="0"></div>
+    <div><label for="in-soglia">Soglia operativa conto</label><input id="in-soglia" type="number" step="50" min="0"></div>
+    <div><label for="in-goal">Obiettivo</label><input id="in-goal" type="number" step="500" min="0"></div>
+  </div>
+</section>
+
+<section>
+  <h2>Tutti i mesi vs budget</h2>
+  <div class="hint">Verde = nel budget · rosso = sforato · il budget (colonna ambra) si modifica cliccandoci sopra; budget 0 = voce una tantum, senza semaforo (numeri in grigio corsivo) · click su una cella per vedere e correggere i movimenti (\ud83c\udd7f\ufe0f = dal dettaglio PayPal). Nei mesi coperti dal CSV PayPal le spese PayPal sono smistate nelle categorie reali; senza CSV restano nella riga 'PayPal (senza dettaglio)'.</div>
+  <div class="tbl-scroll"><table id="matrix"></table></div>
+  <div id="userrules" style="margin-top:10px"></div>
+  <div id="detail"></div>
+</section>
+
+<section>
+  <h2>Bilancio dell'anno — cosa stiamo facendo bene</h2>
+  <div class="hint">Budget annuo = budget mensile &times; mesi con dati. Le voci una tantum (budget 0) sono registrate ma non giudicate.</div>
+  <div class="tbl-scroll"><table id="yeartbl"></table></div>
+</section>
+
+<section>
+  <h2>Dentro la voce PayPal</h2>
+  <div class="hint">Composizione per controparte degli acquisti PayPal (solo consultazione: sul conto sono già contati come SDD).</div>
+  <div class="ppgrid" id="ppgrid"></div>
+</section>
+
+<section>
+  <div class="toolbar">
+    <button class="btn" id="btn-export">Scarica backup dati (JSON)</button>
+    <button class="btn" id="btn-import">Carica backup (JSON)</button>
+    <button class="btn" id="btn-link">Collega file di backup (auto-sync)</button>
+    <button class="btn" id="btn-relink">Riapri file collegato</button>
+    <span id="linkstate" style="font-family:var(--mono);font-size:11.5px;color:var(--mist)"></span>
+    <input type="file" id="backupinput" accept=".json,application/json" style="display:none">
+    <button class="btn danger" id="btn-reset">Azzera e ricarica dati iniziali</button>
+  </div>
+</section>
+
+</div>
+</div>
+<script src="./data.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>
