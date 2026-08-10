@@ -28,15 +28,15 @@ const RULES = [
 ["AMSTERDAM","Viaggi"],["SCHIPHOL","Viaggi"],["OVPAY","Viaggi"],["BUNKHOTEL","Viaggi"],["PURMEREND","Viaggi"],
 ["ALBERT HEIJN","Viaggi"],["BCK*","Viaggi"],["SAN GIULIANO","Viaggi"],
 ["LENZONI","Trasferimenti amici"],["BARTILOTTA","Trasferimenti amici"],["VISSANI","Trasferimenti amici"],["SCHIPILLITI","Trasferimenti amici"],
-["PRELIEV","Prelievi contanti"],["AFFITTO","Affitto (chiuso)"],["EMOLUMENTI","Entrata: stipendio"],["SALUTISSIMA","Entrata: rimborsi sanitari"],["ARCA RISPARMIO","Entrata: straordinaria"],["INFRUTTIFERO","Entrata: straordinaria"]
+["SPEEDIANCE","Casa: arredo (una tantum)"],["MOBILE SU MISURA","Casa: arredo (una tantum)"],["ARREDO","Casa: arredo (una tantum)"],["MONDO CONVENIENZA","Casa: arredo (una tantum)"],["IKEA","Casa: arredo (una tantum)"],["RATA MOBILE","Casa: arredo (una tantum)"],["PRELIEV","Prelievi contanti"],["AFFITTO","Affitto (chiuso)"],["EMOLUMENTI","Entrata: stipendio"],["SALUTISSIMA","Entrata: rimborsi sanitari"],["ARCA RISPARMIO","Entrata: straordinaria"],["INFRUTTIFERO","Entrata: straordinaria"]
 ];
-const SPESA_CATS_BASE = ["Rata mutuo","Bollette","Internet/telefono","Alimentari","Ristoranti/bar","Auto: carburante","Auto: telepass","Auto: parcheggi","Auto: bollo/ACI","Assicurazione auto","Sport","Salute","Cura persona","Shopping/Amazon","Abbonamenti","PayPal (senza dettaglio)","Libri/cultura","Trasferimenti amici","Viaggi","Ottica/occhiali","Prelievi contanti","Affitto (chiuso)","Abbigliamento","Personal trainer (rimborsato)","Polizza vita (chiusa)","Altro"];
+const SPESA_CATS_BASE = ["Rata mutuo","Bollette","Internet/telefono","Alimentari","Ristoranti/bar","Auto: carburante","Auto: telepass","Auto: parcheggi","Auto: bollo/ACI","Assicurazione auto","Sport","Salute","Cura persona","Shopping/Amazon","Abbonamenti","PayPal (senza dettaglio)","Libri/cultura","Trasferimenti amici","Viaggi","Ottica/occhiali","Prelievi contanti","Affitto (chiuso)","Casa: arredo (una tantum)","Abbigliamento","Personal trainer (rimborsato)","Polizza vita (chiusa)","Altro"];
 const EXTRA_CATS = ["Casa: acquisto (una tantum)","Casa: oneri (una tantum)"];
 const SAVE_CATS = ["Risparmio: Trade Republic","Risparmio: Directa"];
 const IN_CATS = ["Entrata: stipendio","Entrata: rimborsi sanitari","Entrata: straordinaria","Entrata: altro"];
 const spesaCats = () => [...SPESA_CATS_BASE, ...((typeof S!=='undefined'&&S&&S.customCats)||[])];
 const allCats = () => [...spesaCats(), ...EXTRA_CATS, ...SAVE_CATS, ...IN_CATS];
-const DEFAULT_BUDGET = {"Rata mutuo":645,"Bollette":120,"Internet/telefono":25,"Alimentari":165,"Ristoranti/bar":150,"Auto: carburante":100,"Auto: telepass":40,"Auto: parcheggi":6,"Auto: bollo/ACI":0,"Assicurazione auto":0,"Sport":90,"Salute":55,"Cura persona":30,"Shopping/Amazon":30,"Abbonamenti":45,"PayPal (senza dettaglio)":0,"Libri/cultura":10,"Trasferimenti amici":50,"Viaggi":50,"Ottica/occhiali":0,"Prelievi contanti":0,"Affitto (chiuso)":0,"Abbigliamento":0,"Personal trainer (rimborsato)":0,"Polizza vita (chiusa)":0,"Altro":20};
+const DEFAULT_BUDGET = {"Rata mutuo":645,"Bollette":120,"Internet/telefono":25,"Alimentari":165,"Ristoranti/bar":150,"Auto: carburante":100,"Auto: telepass":40,"Auto: parcheggi":6,"Auto: bollo/ACI":0,"Assicurazione auto":0,"Sport":90,"Salute":55,"Cura persona":30,"Shopping/Amazon":30,"Abbonamenti":45,"PayPal (senza dettaglio)":0,"Libri/cultura":10,"Trasferimenti amici":50,"Viaggi":50,"Ottica/occhiali":0,"Prelievi contanti":0,"Affitto (chiuso)":0,"Casa: arredo (una tantum)":0,"Abbigliamento":0,"Personal trainer (rimborsato)":0,"Polizza vita (chiusa)":0,"Altro":20};
 const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
 /* ============ stato ============ */
