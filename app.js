@@ -199,7 +199,7 @@ async function applyBackup(j){
   if(!j || !j.bper || !j.cushion) throw new Error('non sembra un backup del Quadro');
   S = j;
   S.overrides=S.overrides||{}; S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[];
-  S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.budget=S.budget||{...DEFAULT_BUDGET};
+  S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.budget=S.budget||{...DEFAULT_BUDGET}; S.piano=S.piano||{voci:[],rata:400,start:9,extra:1000,liquidita:9000};
   renderAll();
   await saveNow();   // scrittura IMMEDIATA, così al reload non torna indietro
 }
@@ -207,9 +207,16 @@ async function applyBackup(j){
 async function loadState(){
   try{
     const v = await store.get('quadro-v1');
-    if(v){ S = JSON.parse(v); S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[]; S.customCats=S.customCats||[]; S.cash=S.cash||[]; return; }
+    if(v){ S = JSON.parse(v); S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[]; S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.piano=S.piano||{voci:[],rata:400,start:9,extra:1000,liquidita:9000}; return; }
   }catch(e){ /* chiave assente o corrotta: primo avvio */ }
-  S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
+  S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], piano:{voci:[
+    {n:"Scrittura privata", tot:4274, pag:4274, chi:"compagna", note:"pagata"},
+    {n:"Letto 2a rata", tot:1040, pag:1040, chi:"compagna", note:"pagata"},
+    {n:"Mobili ulteriori", tot:5000, pag:5000, chi:"comune", note:"contanti 1370 + 600 compagna + 3030 Marco"},
+    {n:"Mobile su misura - anticipo", tot:1500, pag:1500, chi:"Marco", note:"anticipo versato"},
+    {n:"Speediance", tot:4000, pag:4000, chi:"Marco", note:"pagato in unica soluzione"},
+    {n:"Mobile su misura - saldo", tot:5000, pag:0, chi:"Marco", note:"a rate con l'amico"}
+  ], rata:400, start:9, extra:1000, liquidita:9000}, budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
   scheduleSave();
 }
 
@@ -606,7 +613,60 @@ function renderYear(){
   h += "<tr class='tot'><td>Risparmiato nell'anno (TR + Directa)</td><td></td><td style='color:var(--court);font-weight:600'>"+fmt2(sav)+"</td><td></td><td></td></tr>";
   document.getElementById('yeartbl').innerHTML = h;
 }
-function renderAll(){ renderMatrix(); renderYear(); renderUserRules(); renderCushion(); renderPP(); }
+function renderPiano(){
+  const P = S.piano || {voci:[],rata:400,start:9,extra:1000,liquidita:9000};
+  const tbl = document.getElementById('pianotbl'); if(!tbl) return;
+  let totale=0, pagato=0;
+  let h = "<tr><th>Voce</th><th>Totale</th><th>Pagato</th><th>Da pagare</th><th>Chi</th><th>Note</th></tr>";
+  for(const v of P.voci){
+    totale+=v.tot; pagato+=v.pag;
+    const resta=v.tot-v.pag;
+    const cls = resta<=0 ? "style='color:var(--court)'" : "style='color:var(--clay);font-weight:600'";
+    h += "<tr><td>"+v.n+"</td><td>"+fmt2(v.tot)+"</td><td>"+fmt2(v.pag)+"</td><td "+cls+">"+(resta<=0?"\u2713 saldata":fmt2(resta))+"</td><td style='text-align:left'>"+v.chi+"</td><td style='text-align:left;white-space:normal;font-family:var(--sans);font-size:12px;color:var(--mist)'>"+(v.note||'')+"</td></tr>";
+  }
+  const resta = totale-pagato;
+  h += "<tr class='tot'><td>TOTALE</td><td>"+fmt2(totale)+"</td><td>"+fmt2(pagato)+"</td><td>"+fmt2(resta)+"</td><td></td><td></td></tr>";
+  tbl.innerHTML=h;
+
+  // riepilogo in alto: usa il saldo conto REALE che arriva dagli import
+  const cc = (S.cushion&&S.cushion.cc)||0, soglia=(S.cushion&&S.cushion.soglia)||0;
+  const disponibile = Math.max(0, cc - soglia);
+  const copertura = disponibile - resta;
+  const sum = document.getElementById('pianosum');
+  if(sum) sum.innerHTML =
+    "<div class='cn'><b>"+fmt(resta)+"</b><small>Ancora da pagare</small></div>"+
+    "<div class='cn'><b>"+fmt(disponibile)+"</b><small>Disponibile sul conto</small></div>"+
+    "<div class='cn'><b style='color:"+(copertura>=0?"var(--court)":"var(--clay)")+"'>"+(copertura>=0?"+":"")+fmt(copertura)+"</b><small>"+(copertura>=0?"Copertura":"Da coprire col reddito")+"</small></div>";
+
+  // calendario rate
+  const rata=P.rata||0, start=P.start||9, extra=P.extra||0;
+  const cal=document.getElementById('pc-cal');
+  if(cal){
+    if(rata<=0 || resta<=0){ cal.innerHTML=""; }
+    else{
+      let debito=resta, m=start-1, righe=[], giro=0;
+      while(debito>0 && giro<36){
+        const mm=m%12;
+        let q=Math.min(rata + (mm===11?extra:0), debito);
+        debito-=q;
+        righe.push({m:mm, q, resta:debito, anno: 2026 + Math.floor(m/12)});
+        m++; giro++;
+      }
+      let ch="<div style='font-family:var(--mono);font-size:12.5px'>";
+      ch+="<div style='margin-bottom:6px;color:var(--mist)'>Calendario: chiusura prevista <b>"+MESI[righe[righe.length-1].m]+" "+righe[righe.length-1].anno+"</b> in "+righe.length+" rate</div>";
+      ch+=righe.map(r=>"<span style='display:inline-block;margin:2px;padding:3px 9px;border:1px solid var(--line);border-radius:12px'>"+MESI[r.m]+" "+String(r.anno).slice(2)+": <b>"+fmt2(r.q)+"</b>"+(r.m===11&&extra?" \ud83c\udf81":"")+"</span>").join("");
+      ch+="</div>";
+      cal.innerHTML=ch;
+    }
+  }
+  // campi
+  const ri=document.getElementById('pc-rata'), st=document.getElementById('pc-start'), ex=document.getElementById('pc-extra');
+  if(ri && document.activeElement!==ri) ri.value=rata;
+  if(ex && document.activeElement!==ex) ex.value=extra;
+  if(st && !st.options.length){ st.innerHTML=MESI.map((n,i)=>"<option value='"+(i+1)+"'>"+n+" 2026</option>").join(""); }
+  if(st) st.value=start;
+}
+function renderAll(){ renderMatrix(); renderYear(); renderUserRules(); renderCushion(); renderPP(); renderPiano(); }
 
 /* ============ eventi ============ */
 function bind(){
@@ -637,6 +697,14 @@ function bind(){
     document.getElementById('man-a').value=''; document.getElementById('man-x').value='';
     renderAll(); scheduleSave();
   });
+  const pcs=document.getElementById('pc-save');
+  if(pcs) pcs.addEventListener('click',()=>{
+    S.piano=S.piano||{};
+    S.piano.rata=parseFloat(document.getElementById('pc-rata').value)||0;
+    S.piano.start=parseInt(document.getElementById('pc-start').value,10)||9;
+    S.piano.extra=parseFloat(document.getElementById('pc-extra').value)||0;
+    renderPiano(); scheduleSave();
+  });
   document.getElementById('btn-link').addEventListener('click',linkBackup);
   const relink=document.getElementById('btn-relink');
   if(relink) relink.addEventListener('click',async ()=>{
@@ -658,7 +726,14 @@ function bind(){
   });
   document.getElementById('btn-reset').addEventListener('click',async ()=>{
     if(!confirm("Cancella tutti i dati inseriti e torna ai dati iniziali (gen–lug 2026)?")) return;
-    S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
+    S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], piano:{voci:[
+    {n:"Scrittura privata", tot:4274, pag:4274, chi:"compagna", note:"pagata"},
+    {n:"Letto 2a rata", tot:1040, pag:1040, chi:"compagna", note:"pagata"},
+    {n:"Mobili ulteriori", tot:5000, pag:5000, chi:"comune", note:"contanti 1370 + 600 compagna + 3030 Marco"},
+    {n:"Mobile su misura - anticipo", tot:1500, pag:1500, chi:"Marco", note:"anticipo versato"},
+    {n:"Speediance", tot:4000, pag:4000, chi:"Marco", note:"pagato in unica soluzione"},
+    {n:"Mobile su misura - saldo", tot:5000, pag:0, chi:"Marco", note:"a rate con l'amico"}
+  ], rata:400, start:9, extra:1000, liquidita:9000}, budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
     renderAll(); scheduleSave();
   });
   window.addEventListener('resize',renderCushion);

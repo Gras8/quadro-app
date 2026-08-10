@@ -90,6 +90,24 @@
   <div class="tbl-scroll"><table id="yeartbl"></table></div>
 </section>
 
+
+<section>
+  <h2>Piano casa — spese straordinarie</h2>
+  <div class="hint">Fuori dal budget mensile: sono uscite una tantum legate alla casa. Qui vedi quanto e' gia' uscito, quanto resta da pagare e se la liquidita' basta.</div>
+  <div id="pianosum" class="cushion-nums" style="margin-bottom:14px"></div>
+  <div class="tbl-scroll"><table id="pianotbl"></table></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:14px">
+    <div><label style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Rata mobile (€/mese)</label>
+      <input id="pc-rata" type="number" step="50" min="0" style="width:110px;font-family:var(--mono);padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+    <div><label style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Prima rata dal mese</label>
+      <select id="pc-start" style="padding:7px;border:1px solid var(--line);border-radius:6px"></select></div>
+    <div><label style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Extra tredicesima (dic)</label>
+      <input id="pc-extra" type="number" step="100" min="0" style="width:110px;font-family:var(--mono);padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+    <button class="btn" id="pc-save">Aggiorna piano</button>
+  </div>
+  <div id="pc-cal" style="margin-top:14px"></div>
+</section>
+
 <section>
   <h2>Dentro la voce PayPal</h2>
   <div class="hint">Composizione per controparte degli acquisti PayPal (solo consultazione: sul conto sono già contati come SDD).</div>
