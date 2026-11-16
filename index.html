@@ -70,7 +70,7 @@
   <div class="cushion-in">
     <div><label for="in-tr">Saldo Trade Republic</label><input id="in-tr" type="number" step="10" min="0"></div>
     <div><label for="in-cc">Saldo conto corrente</label><input id="in-cc" type="number" step="10" min="0"></div>
-    <div><label for="in-imp">Impegnati (mobili, in uscita)</label><input id="in-imp" type="number" step="100" min="0"></div>
+    <div><label for="in-imp">Impegnati (ancora da pagare)</label><span style="display:flex;gap:6px;align-items:center"><input id="in-imp" type="number" step="100" min="0"><button class="btn" id="btn-imp0" type="button" style="padding:6px 10px" title="Quei soldi sono gia' stati spesi: azzera">Azzera</button></span></div>
     <div><label for="in-soglia">Soglia operativa conto</label><input id="in-soglia" type="number" step="50" min="0"></div>
     <div><label for="in-goal">Obiettivo</label><input id="in-goal" type="number" step="500" min="0"></div>
   </div>
@@ -106,6 +106,22 @@
     <button class="btn" id="pc-save">Aggiorna piano</button>
   </div>
   <div id="pc-cal" style="margin-top:14px"></div>
+  <button class="btn" id="pv-new" type="button" style="margin-top:14px">+ Aggiungi voce</button>
+  <details id="pv-box" style="margin-top:10px">
+    <summary id="pv-title" style="cursor:pointer;font-size:13px;color:var(--mist)">Nuova voce</summary>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+      <div><label for="pv-n" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Voce</label><input id="pv-n" type="text" style="width:240px;padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-tot" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Totale (€)</label><input id="pv-tot" type="number" step="50" min="0" style="width:100px;font-family:var(--mono);padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-pag" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Pagato (€)</label><input id="pv-pag" type="number" step="50" min="0" style="width:100px;font-family:var(--mono);padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-chi" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Chi</label><input id="pv-chi" type="text" style="width:100px;padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-rata" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Rata propria (€/mese)</label><input id="pv-rata" type="number" step="50" min="0" placeholder="vuoto = rata globale" style="width:140px;font-family:var(--mono);padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-da" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Prima rata (mese)</label><input id="pv-da" type="month" style="padding:6px;border:1px solid var(--line);border-radius:6px"></div>
+      <div><label for="pv-note" style="font-size:12px;color:var(--mist);display:block;margin-bottom:3px">Note</label><input id="pv-note" type="text" style="width:200px;padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+      <button class="btn" id="pv-save" type="button">Salva voce</button>
+      <button class="btn" id="pv-cancel" type="button">Annulla</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--mist);margin-top:6px">Se indichi una rata propria la voce ha un suo calendario e non entra nella rata mobile globale.</div>
+  </details>
 </section>
 
 <section>

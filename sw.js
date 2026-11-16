@@ -1,6 +1,6 @@
 /* Service worker del Quadro: app shell in cache per l'uso offline.
    Quando aggiorni i file dell'app, incrementa la versione qui sotto. */
-const CACHE = 'quadro-v5';
+const CACHE = 'quadro-v6';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './data.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png',

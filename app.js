@@ -34,8 +34,18 @@ const SPESA_CATS_BASE = ["Rata mutuo","Bollette","Internet/telefono","Alimentari
 const EXTRA_CATS = ["Casa: acquisto (una tantum)","Casa: oneri (una tantum)"];
 const SAVE_CATS = ["Risparmio: Trade Republic","Risparmio: Directa"];
 const IN_CATS = ["Entrata: stipendio","Entrata: rimborsi sanitari","Entrata: straordinaria","Entrata: altro"];
+/* entrata a parte: NON e' stipendio ne' "altro", non entra nella riga Entrate (ha una riga sua) */
+const RIMB_CAT = "Entrata: rimborso mutuo (Giulia)";
+const RIMB_CATS = [RIMB_CAT];
+const isIncomeCat = c => String(c).indexOf('Entrata')===0;
+/* "spese correnti" = uscite vita senza casa / una tantum / prelievi (i prelievi sono solo provvista contanti) */
+const isCurrentCat = c => !/^Casa:/.test(c) && c.indexOf('(una tantum)')<0 && c!=='Prelievi contanti';
 const spesaCats = () => [...SPESA_CATS_BASE, ...((typeof S!=='undefined'&&S&&S.customCats)||[])];
-const allCats = () => [...spesaCats(), ...EXTRA_CATS, ...SAVE_CATS, ...IN_CATS];
+const allCats = () => [...spesaCats(), ...EXTRA_CATS, ...SAVE_CATS, ...IN_CATS, ...RIMB_CATS];
+/* regole utente aggiunte una sola volta ai dati (non risorgono se le cancelli dall'interfaccia) */
+const MIGR_RULES = [["SPEEDIANCE","Casa: arredo (una tantum)"],["GIULIA ASCIUTTO",RIMB_CAT]];
+const newPiano = () => ({voci:[],rata:400,start:9,extra:1000,liquidita:9000});
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const DEFAULT_BUDGET = {"Rata mutuo":645,"Bollette":120,"Internet/telefono":25,"Alimentari":165,"Ristoranti/bar":150,"Auto: carburante":100,"Auto: telepass":40,"Auto: parcheggi":6,"Auto: bollo/ACI":0,"Assicurazione auto":0,"Sport":90,"Salute":55,"Cura persona":30,"Shopping/Amazon":30,"Abbonamenti":45,"PayPal (senza dettaglio)":0,"Libri/cultura":10,"Trasferimenti amici":50,"Viaggi":50,"Ottica/occhiali":0,"Prelievi contanti":0,"Affitto (chiuso)":0,"Casa: arredo (una tantum)":0,"Abbigliamento":0,"Personal trainer (rimborsato)":0,"Polizza vita (chiusa)":0,"Altro":20};
 const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 
@@ -53,7 +63,7 @@ const monthOf = d => { const p=d.split('/'); return parseInt(p[1],10); };
 const PP_RULES=[["NESPRESSO","Alimentari"],["PROZIS","Alimentari"],["SPOTIFY","Abbonamenti"],
 ["MISTER TENNIS","Sport"],["ADIDAS","Abbigliamento"],["THEORY","Sport"],["TELECOM","Internet/telefono"],
 ["EASYPARK","Auto: parcheggi"],["TOURS AND TICKETS","Viaggi"],["SAVE THE CHILDREN","Trasferimenti amici"],
-["SUBITO","Entrata: altro"],["EVOX","Altro"]];
+["SUBITO","Entrata: altro"],["EVOX","Altro"],["SPEEDIANCE","Casa: arredo (una tantum)"]];
 const ppMonth = p => parseInt(p.d.split('/')[1],10);
 const pp2026 = p => p.d.split('/')[2]==='2026';
 const ppSkip = p => p.t==='Bonifico bancario sul conto PayPal' || p.t==='Pagamento con credito acquirenti PayPal' || (p.t||'').indexOf('Trasferimento avviato')===0 || (p.n||'').indexOf('PayPal (Europe)')===0;
@@ -69,7 +79,7 @@ function categorizePP(p){
 function matchUserRules(T, sign){
   for(const [kw,cat] of (S.userRules||[])){
     if(!T.includes(kw)) continue;
-    const isIn = cat.indexOf('Entrata')===0;
+    const isIn = isIncomeCat(cat);
     if(sign==='A' ? isIn : !isIn) return cat;
   }
   return null;
@@ -88,6 +98,35 @@ function categorize(t){
   if(D.includes("OTTICA")||D.includes("OPTOMETRICO")) return t.a>=100 ? "Ottica/occhiali" : "Salute"; // lenti a contatto vs occhiali
   for(const [kw,cat] of RULES){ if(D.includes(kw) && cat.indexOf("Entrata")!==0) return cat; }
   return "Altro";
+}
+
+/* ============ stato: un unico punto di normalizzazione (ogni S = ... passa da qui) ============ */
+function freshState(){
+  return {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], piano:{voci:[
+    {n:"Scrittura privata", tot:4274, pag:4274, chi:"compagna", note:"pagata"},
+    {n:"Letto 2a rata", tot:1040, pag:1040, chi:"compagna", note:"pagata"},
+    {n:"Mobili ulteriori", tot:5000, pag:5000, chi:"comune", note:"contanti 1370 + 600 compagna + 3030 Marco"},
+    {n:"Mobile su misura - anticipo", tot:1500, pag:1500, chi:"Marco", note:"anticipo versato"},
+    {n:"Speediance", tot:4000, pag:4000, chi:"Marco", note:"pagato in unica soluzione"},
+    {n:"Mobile su misura - saldo", tot:5000, pag:0, chi:"Marco", note:"a rate con l'amico"}
+  ], rata:400, start:9, extra:1000, liquidita:9000}, budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
+}
+function normalizeState(){
+  let changed=false;
+  S.bper=S.bper||[]; S.pp=S.pp||[];
+  S.overrides=S.overrides||{}; S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[];
+  S.customCats=S.customCats||[]; S.cash=S.cash||[];
+  S.cushion=S.cushion||{tr:0,cc:0,imp:0,soglia:1800,goal:6000};
+  S.budget=S.budget||{...DEFAULT_BUDGET};
+  S.piano=S.piano||newPiano();
+  S.piano.voci=S.piano.voci||[];
+  S.migr=S.migr||{};
+  if(!S.migr.rules6){
+    for(const [kw,cat] of MIGR_RULES){ if(!S.userRules.some(r=>r[0]===kw)) S.userRules.unshift([kw,cat]); }
+    S.migr.rules6=true; changed=true;
+  }
+  for(const c of spesaCats()){ if(!(c in S.budget)) S.budget[c]=DEFAULT_BUDGET[c]||0; }
+  return changed;
 }
 
 /* ============ storage ============ */
@@ -155,7 +194,7 @@ async function linkBackup(){
         const j = JSON.parse(await f.text());
         if(j.bper && j.cushion){
           const usa = confirm("Il file contiene un backup con "+j.bper.length+" movimenti.\nOK = carica quei dati nell'app\nAnnulla = sovrascrivi il file con i dati attuali");
-          if(usa){ S = j; renderAll(); }
+          if(usa){ S = j; normalizeState(); renderAll(); }
         }
       }
     }catch(e){ /* file nuovo o non leggibile: si sovrascrive */ }
@@ -169,6 +208,7 @@ async function linkBackup(){
 let saveTimer=null;
 const setSaveMsg = m => document.getElementById('savestate').textContent = m;
 async function doSave(attempt){
+  S.savedAt=Date.now();
   try{
     await store.set('quadro-v1', JSON.stringify(S));
     const wrote = await writeBackupFile();
@@ -188,6 +228,7 @@ function scheduleSave(){
   saveTimer=setTimeout(()=>doSave(0),800);
 }
 async function saveNow(){
+  S.savedAt=Date.now();
   const payload = JSON.stringify(S);
   let ok=false;
   try{ await store.set('quadro-v1', payload); ok=true; }catch(e){ ok=false; }
@@ -198,8 +239,7 @@ async function saveNow(){
 async function applyBackup(j){
   if(!j || !j.bper || !j.cushion) throw new Error('non sembra un backup del Quadro');
   S = j;
-  S.overrides=S.overrides||{}; S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[];
-  S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.budget=S.budget||{...DEFAULT_BUDGET}; S.piano=S.piano||{voci:[],rata:400,start:9,extra:1000,liquidita:9000};
+  normalizeState();
   renderAll();
   await saveNow();   // scrittura IMMEDIATA, così al reload non torna indietro
 }
@@ -207,16 +247,9 @@ async function applyBackup(j){
 async function loadState(){
   try{
     const v = await store.get('quadro-v1');
-    if(v){ S = JSON.parse(v); S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[]; S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.piano=S.piano||{voci:[],rata:400,start:9,extra:1000,liquidita:9000}; return; }
+    if(v){ S = JSON.parse(v); if(normalizeState()) scheduleSave(); return; }
   }catch(e){ /* chiave assente o corrotta: primo avvio */ }
-  S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], piano:{voci:[
-    {n:"Scrittura privata", tot:4274, pag:4274, chi:"compagna", note:"pagata"},
-    {n:"Letto 2a rata", tot:1040, pag:1040, chi:"compagna", note:"pagata"},
-    {n:"Mobili ulteriori", tot:5000, pag:5000, chi:"comune", note:"contanti 1370 + 600 compagna + 3030 Marco"},
-    {n:"Mobile su misura - anticipo", tot:1500, pag:1500, chi:"Marco", note:"anticipo versato"},
-    {n:"Speediance", tot:4000, pag:4000, chi:"Marco", note:"pagato in unica soluzione"},
-    {n:"Mobile su misura - saldo", tot:5000, pag:0, chi:"Marco", note:"a rate con l'amico"}
-  ], rata:400, start:9, extra:1000, liquidita:9000}, budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
+  S = freshState(); normalizeState();
   scheduleSave();
 }
 
@@ -396,7 +429,7 @@ function computeMatrix(){
     const c = categorizePP(p);
     if(!(c in M)) M[c]=Array(12).fill(0);
     if(p.g<0) M[c][m]+=(-p.g);
-    else if(IN_CATS.includes(c)) M[c][m]+=p.g;
+    else if(isIncomeCat(c)) M[c][m]+=p.g;
     else M[c][m]-=p.g; // rimborso da negozio: compensa la categoria
   }
   return M;
@@ -421,25 +454,47 @@ function renderMatrix(){
   }
   // totale vita
   h += "<tr class='tot'><td>TOTALE USCITE VITA</td><td class='bud'>"+fmt2(spesaCats().reduce((s,c)=>s+(S.budget[c]||0),0))+"</td>";
-  const totRow=[], inRow=[], savRow=[];
+  const totRow=[], curRow=[], inRow=[], savRow=[], rimbRow=[];
+  const curCats = spesaCats().filter(isCurrentCat);
   for(let m=0;m<12;m++){
     let tot=0; for(const c of spesaCats()) tot += M[c]?M[c][m]:0;
     totRow.push(tot);
+    let cur=0; for(const c of curCats) cur += M[c]?M[c][m]:0;
+    curRow.push(cur);
     let inc=0; for(const c of IN_CATS) inc += M[c]?M[c][m]:0;
     inRow.push(inc);
     let sv=0; for(const c of SAVE_CATS) sv += M[c]?M[c][m]:0;
     savRow.push(sv);
+    let rb=0; for(const c of RIMB_CATS) rb += M[c]?M[c][m]:0;
+    rimbRow.push(rb);
     h += "<td>"+(monthsWithData[m]?fmt2(totRow[m]):"<span class='dash'>–</span>")+"</td>";
   }
   h += "</tr>";
+  // spese correnti: senza casa / una tantum / prelievi contanti, cosi' il margine si legge
+  h += "<tr class='tot'><td title='Esclude Casa:*, voci (una tantum) e Prelievi contanti'>SPESE CORRENTI <small>(senza casa/una tantum/prelievi)</small></td><td class='bud'>"+fmt2(curCats.reduce((s,c)=>s+(S.budget[c]||0),0))+"</td>";
+  for(let m=0;m<12;m++) h += "<td>"+(monthsWithData[m]?fmt2(curRow[m]):"<span class='dash'>–</span>")+"</td>";
+  h += "</tr>";
   h += "<tr><td>Risparmio (TR + Directa)</td><td></td>"+savRow.map((v,m)=>"<td>"+(monthsWithData[m]&&v?fmt2(v):"<span class='dash'>–</span>")+"</td>").join("")+"</tr>";
   h += "<tr><td>Entrate</td><td></td>"+inRow.map((v,m)=>"<td>"+(monthsWithData[m]&&v?fmt2(v):"<span class='dash'>–</span>")+"</td>").join("")+"</tr>";
-  h += "<tr class='saldo'><td>Saldo mese (dopo risparmi)</td><td></td>";
+  h += "<tr class='saldo'><td>Margine corrente (entrate − spese correnti)</td><td></td>";
+  for(let m=0;m<12;m++){
+    if(!monthsWithData[m]){ h+="<td><span class='dash'>–</span></td>"; continue; }
+    const mg = inRow[m]-curRow[m];
+    h += "<td class='"+(mg<0?'neg':'pos')+"'>"+fmt2(mg)+"</td>";
+  }
+  h += "</tr>";
+  h += "<tr><td>"+RIMB_CAT.replace('Entrata: ','Entrata a parte: ')+"</td><td></td>";
+  for(let m=0;m<12;m++){
+    const v=rimbRow[m];
+    h += (monthsWithData[m]&&v) ? "<td class='cell' data-cat=\""+RIMB_CAT+"\" data-m='"+m+"'>"+fmt2(v)+"</td>" : "<td><span class='dash'>–</span></td>";
+  }
+  h += "</tr>";
+  h += "<tr class='saldo'><td>Saldo mese (dopo risparmi, incl. rimborso mutuo)</td><td></td>";
   for(let m=0;m<12;m++){
     if(!monthsWithData[m]){ h+="<td><span class='dash'>–</span></td>"; continue; }
     let extra=0; for(const c of EXTRA_CATS) extra += M[c]?M[c][m]:0;
-    const s = inRow[m]-totRow[m]-savRow[m]-extra;
-    h += "<td class='"+(s<0?'neg':'pos')+"'>"+fmt2(s)+"</td>";
+    const sd = inRow[m]+rimbRow[m]-totRow[m]-savRow[m]-extra;
+    h += "<td class='"+(sd<0?'neg':'pos')+"'>"+fmt2(sd)+"</td>";
   }
   h += "</tr>";
   document.getElementById('matrix').innerHTML=h;
@@ -450,6 +505,27 @@ function renderMatrix(){
     td.addEventListener('click',()=>renderDetail(td.dataset.cat, parseInt(td.dataset.m,10)));
   });
 }
+let editCashId = null;
+const cashDupes = x => (S.cash||[]).filter(y=>y.id!==x.id && y.c===x.c && y.m===x.m);
+const monthOpts = sel => MESI.map((nm,i)=>"<option value='"+(i+1)+"'"+((i+1)===sel?" selected":"")+">"+nm+"</option>").join("");
+function cashRowHtml(x){
+  const inp = "padding:4px;border:1px solid var(--line);border-radius:5px;font-size:12px";
+  if(editCashId===x.id){
+    return "<div class='txrow' style='flex-wrap:wrap'>"+
+      "<input class='ce-a' type='number' step='0.5' min='0' value='"+x.a+"' style='width:90px;font-family:var(--mono);"+inp+"' aria-label='Importo'>"+
+      "<select class='ce-c' style='"+inp+"'>"+spesaCats().filter(c=>c!=='Prelievi contanti').map(c=>"<option"+(c===x.c?" selected":"")+">"+esc(c)+"</option>").join("")+"</select>"+
+      "<label style='font-size:11.5px;color:var(--mist)'>speso a</label><select class='ce-m' style='"+inp+"'>"+monthOpts(x.m)+"</select>"+
+      "<label style='font-size:11.5px;color:var(--mist)'>prelievo di</label><select class='ce-mp' style='"+inp+"'>"+monthOpts(x.mp||x.m)+"</select>"+
+      "<input class='ce-n' type='text' value=\""+esc(x.n||'')+"\" placeholder='nota' style='flex:1;min-width:120px;"+inp+"'>"+
+      "<button class='btn' data-savecash='"+esc(x.id)+"' style='padding:4px 10px'>Salva</button>"+
+      "<button class='btn' data-cancelcash='1' style='padding:4px 10px'>Annulla</button></div>";
+  }
+  const dup = cashDupes(x).length>0;
+  return "<div class='txrow'><span class='d'>contanti</span><span class='a'>"+fmt2(x.a)+"</span><span class='x' title='"+esc(x.c)+"'>\ud83d\udcb6 "+esc(x.c)+" · "+esc(x.n||'spesa in contanti')+((x.mp&&x.mp!==x.m)?" (speso "+MESI[x.m-1]+", prelievo di "+MESI[x.mp-1]+")":"")+
+    (dup?" <b style='color:var(--clay)' title='Stessa categoria e stesso mese gia presenti: possibile doppione'>\u26a0 doppione?</b>":"")+"</span>"+
+    "<a href='#' data-editcash='"+esc(x.id)+"' style='text-decoration:none;font-size:15px;margin-right:6px' aria-label='Modifica'>\u270e</a>"+
+    "<a href='#' data-delcash='"+esc(x.id)+"' style='color:var(--clay);text-decoration:none;font-size:15px' aria-label='Elimina'>\u2715</a></div>";
+}
 function renderDetail(cat, m){
   const cov = ppCoveredMonths();
   const list = S.bper.filter(t=>{
@@ -459,9 +535,10 @@ function renderDetail(cat, m){
   });
   const ppList = S.pp.filter(p=>pp2026(p) && !ppSkip(p) && ppMonth(p)-1===m && categorizePP(p)===cat);
   const cashList = (S.cash||[]).filter(x=>x.m-1===m && x.c===cat);
+  const poolList = cat==='Prelievi contanti' ? (S.cash||[]).filter(x=>((x.mp||x.m))-1===m) : [];
   const el = document.getElementById('detail');
   el.className='open';
-  const tot = list.reduce((s,t)=>s+t.a,0) + ppList.reduce((s,p)=>s+(p.g<0?-p.g:(IN_CATS.includes(cat)?p.g:-p.g)),0) + cashList.reduce((s,x)=>s+x.a,0);
+  const tot = list.reduce((s,t)=>s+t.a,0) + ppList.reduce((s,p)=>s+(p.g<0?-p.g:(isIncomeCat(cat)?p.g:-p.g)),0) + cashList.reduce((s,x)=>s+x.a,0);
   let h = "<h3>"+cat+" — "+MESI[m]+" · "+(list.length+ppList.length)+" movimenti · "+fmt2(tot)+" €</h3>";
   const opts = sel => [...allCats(),'\u2795 Nuova categoria\u2026'].map(c=>"<option"+(c===sel?" selected":"")+">"+c+"</option>").join("");
   for(const t of list){
@@ -471,9 +548,8 @@ function renderDetail(cat, m){
     const label = (p.n||p.t)+(p.m?" · "+p.m:"");
     h += "<div class='txrow'><span class='d'>"+p.d.split('/').slice(0,2).join('/')+"</span><span class='a'>"+fmt2(Math.abs(p.g))+"</span><span class='x' title=\""+label.replace(/"/g,'&quot;')+"\">\ud83c\udd7f\ufe0f "+label+"</span><select data-src='p' data-id=\""+p.id+"\" aria-label='Cambia categoria'>"+opts(cat)+"</select><button class='btn btn-rule' data-mkrule='p'>regola</button></div>";
   }
-  for(const x of cashList){
-    h += "<div class='txrow'><span class='d'>contanti</span><span class='a'>"+fmt2(x.a)+"</span><span class='x'>\ud83d\udcb6 "+(x.n||'spesa in contanti')+((x.mp&&x.mp!==x.m)?" (prelievo di "+MESI[x.mp-1]+")":"")+"</span><a href='#' data-delcash='"+x.id+"' style='color:var(--clay);text-decoration:none;font-size:15px' aria-label='Elimina'>\u2715</a></div>";
-  }
+  for(const x of cashList) h += cashRowHtml(x);
+  if(poolList.length){ h += "<div style='margin-top:10px;font-size:12px;color:var(--mist)'>Attribuzioni di questo prelievo (correggibili):</div>"; for(const x of poolList) h += cashRowHtml(x); }
   if(cat==='Prelievi contanti'){
     const pool = list.reduce((s,t)=>s+(t.s==='D'?t.a:0),0);
     const allocMese = (S.cash||[]).filter(x=>((x.mp||x.m))-1===m).reduce((s,x)=>s+x.a,0);
@@ -493,7 +569,10 @@ function renderDetail(cat, m){
     const a = parseFloat(el.querySelector('#cash-a').value)||0;
     if(a<=0) return;
     S.cash = S.cash||[];
-    S.cash.push({id: Date.now()+"-"+Math.random().toString(36).slice(2,7), m: parseInt(el.querySelector('#cash-m').value,10), mp: m+1, a, c: el.querySelector('#cash-c').value, n: el.querySelector('#cash-n').value.trim()});
+    const nx = {id: Date.now()+"-"+Math.random().toString(36).slice(2,7), m: parseInt(el.querySelector('#cash-m').value,10), mp: m+1, a, c: el.querySelector('#cash-c').value, n: el.querySelector('#cash-n').value.trim()};
+    const dups = cashDupes(nx);
+    if(dups.length && !confirm("Attenzione: per \""+nx.c+"\" a "+MESI[nx.m-1]+" c'e' gia' "+dups.map(d=>fmt2(d.a)+" \u20ac"+(d.n?" ("+d.n+")":"")).join(" + ")+".\nVuoi aggiungere comunque "+fmt2(nx.a)+" \u20ac?\n(Annulla se e' un doppione: puoi correggere la riga esistente con \u270e)")) return;
+    S.cash.push(nx);
     renderMatrix(); renderYear(); renderDetail(cat,m); scheduleSave();
   });
   el.querySelectorAll('a[data-delcash]').forEach(a=>a.addEventListener('click',e=>{
@@ -501,8 +580,26 @@ function renderDetail(cat, m){
     S.cash = (S.cash||[]).filter(x=>x.id!==a.dataset.delcash);
     renderMatrix(); renderYear(); renderDetail(cat,m); scheduleSave();
   }));
+  el.querySelectorAll('a[data-editcash]').forEach(a=>a.addEventListener('click',e=>{
+    e.preventDefault(); editCashId=a.dataset.editcash; renderDetail(cat,m);
+  }));
+  const cancelBtn = el.querySelector('button[data-cancelcash]');
+  if(cancelBtn) cancelBtn.addEventListener('click',()=>{ editCashId=null; renderDetail(cat,m); });
+  const saveBtn = el.querySelector('button[data-savecash]');
+  if(saveBtn) saveBtn.addEventListener('click',()=>{
+    const row = saveBtn.parentElement;
+    const x = (S.cash||[]).find(y=>y.id===saveBtn.dataset.savecash); if(!x) return;
+    const nv = {id:x.id, a: parseFloat(row.querySelector('.ce-a').value)||0, c: row.querySelector('.ce-c').value,
+      m: parseInt(row.querySelector('.ce-m').value,10), mp: parseInt(row.querySelector('.ce-mp').value,10), n: row.querySelector('.ce-n').value.trim()};
+    if(nv.a<=0) return;
+    const dups = cashDupes(nv);
+    if(dups.length && !confirm("Per \""+nv.c+"\" a "+MESI[nv.m-1]+" esiste gia' un'altra voce ("+dups.map(d=>fmt2(d.a)+" \u20ac").join(" + ")+"). Salvare comunque?")) return;
+    Object.assign(x, nv);
+    editCashId=null;
+    renderMatrix(); renderYear(); renderDetail(cat,m); scheduleSave();
+  });
   el.querySelectorAll('select').forEach(sel=>{
-    if(sel.id==='cash-c') return;
+    if(sel.id==='cash-c' || !sel.dataset.src) return;
     sel.addEventListener('change',()=>{
       let val = sel.value;
       if(val.indexOf('Nuova categoria')>=0){
@@ -613,20 +710,45 @@ function renderYear(){
   h += "<tr class='tot'><td>Risparmiato nell'anno (TR + Directa)</td><td></td><td style='color:var(--court);font-weight:600'>"+fmt2(sav)+"</td><td></td><td></td></tr>";
   document.getElementById('yeartbl').innerHTML = h;
 }
+let editVoce = null; // indice voce in modifica (null = nuova)
+const monthAbs = da => { const m=/^(\d{4})-(\d{2})$/.exec(da||''); return m ? (parseInt(m[1],10)-2026)*12+parseInt(m[2],10)-1 : null; };
+function buildCal(debito, rata, startAbs, extra){
+  let m=startAbs, righe=[], giro=0;
+  while(debito>0 && rata>0 && giro<60){
+    const mm=((m%12)+12)%12;
+    const q=Math.min(rata + (mm===11?extra:0), debito);
+    debito-=q;
+    righe.push({m:mm, q, anno:2026+Math.floor(m/12)});
+    m++; giro++;
+  }
+  return righe;
+}
+const calChips = (righe, extra) => righe.map(r=>"<span style='display:inline-block;margin:2px;padding:3px 9px;border:1px solid var(--line);border-radius:12px'>"+MESI[r.m]+" "+String(r.anno).slice(2)+": <b>"+fmt2(r.q)+"</b>"+(r.m===11&&extra?" \ud83c\udf81":"")+"</span>").join("");
 function renderPiano(){
-  const P = S.piano || {voci:[],rata:400,start:9,extra:1000,liquidita:9000};
+  const P = S.piano || (S.piano=newPiano());
   const tbl = document.getElementById('pianotbl'); if(!tbl) return;
   let totale=0, pagato=0;
-  let h = "<tr><th>Voce</th><th>Totale</th><th>Pagato</th><th>Da pagare</th><th>Chi</th><th>Note</th></tr>";
-  for(const v of P.voci){
-    totale+=v.tot; pagato+=v.pag;
-    const resta=v.tot-v.pag;
+  let h = "<tr><th>Voce</th><th>Totale</th><th>Pagato</th><th>Da pagare</th><th>Chi</th><th>Rate</th><th>Note</th><th></th></tr>";
+  P.voci.forEach((v,i)=>{
+    const tot=+v.tot||0, pag=+v.pag||0;
+    totale+=tot; pagato+=pag;
+    const resta=tot-pag;
     const cls = resta<=0 ? "style='color:var(--court)'" : "style='color:var(--clay);font-weight:600'";
-    h += "<tr><td>"+v.n+"</td><td>"+fmt2(v.tot)+"</td><td>"+fmt2(v.pag)+"</td><td "+cls+">"+(resta<=0?"\u2713 saldata":fmt2(resta))+"</td><td style='text-align:left'>"+v.chi+"</td><td style='text-align:left;white-space:normal;font-family:var(--sans);font-size:12px;color:var(--mist)'>"+(v.note||'')+"</td></tr>";
-  }
+    const rateTxt = (+v.rata>0) ? fmt2(+v.rata)+"/mese"+(v.da?" da "+MESI[parseInt(v.da.slice(5),10)-1]+" "+v.da.slice(2,4):"") : "";
+    h += "<tr><td>"+esc(v.n)+"</td><td>"+fmt2(tot)+"</td><td>"+fmt2(pag)+"</td><td "+cls+">"+(resta<=0?"\u2713 saldata":fmt2(resta))+"</td><td style='text-align:left'>"+esc(v.chi)+"</td><td style='text-align:left;font-size:12px'>"+rateTxt+"</td><td style='text-align:left;white-space:normal;font-family:var(--sans);font-size:12px;color:var(--mist)'>"+esc(v.note||'')+"</td>"+
+      "<td style='white-space:nowrap'><a href='#' data-editvoce='"+i+"' style='text-decoration:none;margin-right:6px' aria-label='Modifica voce'>\u270e</a><a href='#' data-delvoce='"+i+"' style='color:var(--clay);text-decoration:none' aria-label='Elimina voce'>\u2715</a></td></tr>";
+  });
   const resta = totale-pagato;
-  h += "<tr class='tot'><td>TOTALE</td><td>"+fmt2(totale)+"</td><td>"+fmt2(pagato)+"</td><td>"+fmt2(resta)+"</td><td></td><td></td></tr>";
+  h += "<tr class='tot'><td>TOTALE</td><td>"+fmt2(totale)+"</td><td>"+fmt2(pagato)+"</td><td>"+fmt2(resta)+"</td><td></td><td></td><td></td><td></td></tr>";
   tbl.innerHTML=h;
+  tbl.querySelectorAll('a[data-editvoce]').forEach(a=>a.addEventListener('click',e=>{ e.preventDefault(); openVoce(parseInt(a.dataset.editvoce,10)); }));
+  tbl.querySelectorAll('a[data-delvoce]').forEach(a=>a.addEventListener('click',e=>{
+    e.preventDefault();
+    const i=parseInt(a.dataset.delvoce,10);
+    if(!confirm("Eliminare la voce \""+(P.voci[i]&&P.voci[i].n)+"\"?")) return;
+    P.voci.splice(i,1); if(editVoce!==null) closeVoce();
+    renderPiano(); scheduleSave();
+  }));
 
   // riepilogo in alto: usa il saldo conto REALE che arriva dagli import
   const cc = (S.cushion&&S.cushion.cc)||0, soglia=(S.cushion&&S.cushion.soglia)||0;
@@ -638,33 +760,51 @@ function renderPiano(){
     "<div class='cn'><b>"+fmt(disponibile)+"</b><small>Disponibile sul conto</small></div>"+
     "<div class='cn'><b style='color:"+(copertura>=0?"var(--court)":"var(--clay)")+"'>"+(copertura>=0?"+":"")+fmt(copertura)+"</b><small>"+(copertura>=0?"Copertura":"Da coprire col reddito")+"</small></div>";
 
-  // calendario rate
+  // calendario rate: le voci con rate proprie hanno il loro calendario, il resto va nella rata mobile globale
   const rata=P.rata||0, start=P.start||9, extra=P.extra||0;
   const cal=document.getElementById('pc-cal');
   if(cal){
-    if(rata<=0 || resta<=0){ cal.innerHTML=""; }
-    else{
-      let debito=resta, m=start-1, righe=[], giro=0;
-      while(debito>0 && giro<36){
-        const mm=m%12;
-        let q=Math.min(rata + (mm===11?extra:0), debito);
-        debito-=q;
-        righe.push({m:mm, q, resta:debito, anno: 2026 + Math.floor(m/12)});
-        m++; giro++;
-      }
-      let ch="<div style='font-family:var(--mono);font-size:12.5px'>";
-      ch+="<div style='margin-bottom:6px;color:var(--mist)'>Calendario: chiusura prevista <b>"+MESI[righe[righe.length-1].m]+" "+righe[righe.length-1].anno+"</b> in "+righe.length+" rate</div>";
-      ch+=righe.map(r=>"<span style='display:inline-block;margin:2px;padding:3px 9px;border:1px solid var(--line);border-radius:12px'>"+MESI[r.m]+" "+String(r.anno).slice(2)+": <b>"+fmt2(r.q)+"</b>"+(r.m===11&&extra?" \ud83c\udf81":"")+"</span>").join("");
-      ch+="</div>";
-      cal.innerHTML=ch;
+    const own = P.voci.filter(v=>(+v.rata>0) && (+v.tot||0)-(+v.pag||0)>0);
+    const restaGlob = P.voci.filter(v=>!(+v.rata>0)).reduce((s,v)=>s+Math.max(0,(+v.tot||0)-(+v.pag||0)),0);
+    let ch="<div style='font-family:var(--mono);font-size:12.5px'>";
+    if(rata>0 && restaGlob>0){
+      const righe=buildCal(restaGlob, rata, start-1, extra);
+      ch+="<div style='margin:6px 0;color:var(--mist)'>Calendario rata mobile (voci senza rate proprie, "+fmt2(restaGlob)+" \u20ac): chiusura prevista <b>"+MESI[righe[righe.length-1].m]+" "+righe[righe.length-1].anno+"</b> in "+righe.length+" rate</div>"+calChips(righe, extra);
     }
+    for(const v of own){
+      const abs = monthAbs(v.da); const sa = abs===null ? start-1 : abs;
+      const righe=buildCal((+v.tot||0)-(+v.pag||0), +v.rata, sa, 0);
+      ch+="<div style='margin:10px 0 6px;color:var(--mist)'>"+esc(v.n)+": chiusura prevista <b>"+MESI[righe[righe.length-1].m]+" "+righe[righe.length-1].anno+"</b> in "+righe.length+" rate</div>"+calChips(righe,0);
+    }
+    ch+="</div>";
+    cal.innerHTML = (rata>0&&restaGlob>0) || own.length ? ch : "";
   }
   // campi
   const ri=document.getElementById('pc-rata'), st=document.getElementById('pc-start'), ex=document.getElementById('pc-extra');
   if(ri && document.activeElement!==ri) ri.value=rata;
   if(ex && document.activeElement!==ex) ex.value=extra;
-  if(st && !st.options.length){ st.innerHTML=MESI.map((n,i)=>"<option value='"+(i+1)+"'>"+n+" 2026</option>").join(""); }
+  if(st && !st.options.length){ st.innerHTML=Array.from({length:24},(_,i)=>"<option value='"+(i+1)+"'>"+MESI[i%12]+" "+(2026+Math.floor(i/12))+"</option>").join(""); }
   if(st) st.value=start;
+}
+function openVoce(i){
+  editVoce = i;
+  const v = i===null ? {n:'',tot:'',pag:0,chi:'Marco',note:'',rata:'',da:''} : S.piano.voci[i];
+  const set=(id,val)=>{ const e=document.getElementById(id); if(e) e.value = val==null?'':val; };
+  set('pv-n',v.n); set('pv-tot',v.tot); set('pv-pag',v.pag); set('pv-chi',v.chi); set('pv-note',v.note); set('pv-rata',v.rata||''); set('pv-da',v.da||'');
+  const t=document.getElementById('pv-title'); if(t) t.textContent = i===null ? 'Nuova voce' : 'Modifica: '+v.n;
+  const box=document.getElementById('pv-box'); if(box){ box.open=true; box.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+}
+function closeVoce(){ editVoce=null; const box=document.getElementById('pv-box'); if(box) box.open=false; }
+function saveVoce(){
+  const n=(document.getElementById('pv-n').value||'').trim();
+  const tot=parseFloat(document.getElementById('pv-tot').value);
+  const pag=parseFloat(document.getElementById('pv-pag').value)||0;
+  if(!n || isNaN(tot) || tot<0){ alert("Servono almeno nome e totale."); return; }
+  const v={n, tot, pag, chi:(document.getElementById('pv-chi').value||'').trim(), note:(document.getElementById('pv-note').value||'').trim(),
+    rata:parseFloat(document.getElementById('pv-rata').value)||0, da:document.getElementById('pv-da').value||''};
+  S.piano=S.piano||newPiano(); S.piano.voci=S.piano.voci||[];
+  if(editVoce===null) S.piano.voci.push(v); else S.piano.voci[editVoce]=v;
+  closeVoce(); renderPiano(); scheduleSave();
 }
 function renderAll(){ renderMatrix(); renderYear(); renderUserRules(); renderCushion(); renderPP(); renderPiano(); }
 
@@ -705,13 +845,23 @@ function bind(){
     S.piano.extra=parseFloat(document.getElementById('pc-extra').value)||0;
     renderPiano(); scheduleSave();
   });
+  const pvs=document.getElementById('pv-save'); if(pvs) pvs.addEventListener('click',saveVoce);
+  const pvc=document.getElementById('pv-cancel'); if(pvc) pvc.addEventListener('click',closeVoce);
+  const pvn=document.getElementById('pv-new'); if(pvn) pvn.addEventListener('click',()=>openVoce(null));
+  const imp0=document.getElementById('btn-imp0');
+  if(imp0) imp0.addEventListener('click',()=>{ S.cushion.imp=0; renderCushion(); scheduleSave(); });
   document.getElementById('btn-link').addEventListener('click',linkBackup);
   const relink=document.getElementById('btn-relink');
   if(relink) relink.addEventListener('click',async ()=>{
     const hnd=await HDB.get(); if(!hnd){ log("Nessun file collegato: usa 'Collega file di backup'.",true); return; }
     if(!(await ensurePerm(hnd,true))){ log("Permesso negato sul file.",true); return; }
     const j=await readHandleData(hnd); fileHandle=hnd;
-    if(j){ await applyBackup(j); }
+    if(j){
+      const localNewer = (S&&S.savedAt||0) > (j.savedAt||0);
+      if(!localNewer) await applyBackup(j);
+      else if(confirm("I dati nell'app sono PIU' RECENTI del file collegato (modifiche fatte mentre il file non era autorizzato).\nOK = tieni i dati dell'app e aggiorna il file\nAnnulla = carica il file (perdi le modifiche piu' recenti)")) await saveNow();
+      else await applyBackup(j);
+    } else { await saveNow(); }
     document.getElementById('linkstate').textContent="\u2713 riaperto: "+hnd.name;
   });
   document.getElementById('btn-import').addEventListener('click',()=>document.getElementById('backupinput').click());
@@ -726,14 +876,7 @@ function bind(){
   });
   document.getElementById('btn-reset').addEventListener('click',async ()=>{
     if(!confirm("Cancella tutti i dati inseriti e torna ai dati iniziali (gen–lug 2026)?")) return;
-    S = {bper:SEED_BPER.slice(), pp:SEED_PP.slice(), overrides:{}, ppOv:{}, userRules:[], customCats:[], cash:[], piano:{voci:[
-    {n:"Scrittura privata", tot:4274, pag:4274, chi:"compagna", note:"pagata"},
-    {n:"Letto 2a rata", tot:1040, pag:1040, chi:"compagna", note:"pagata"},
-    {n:"Mobili ulteriori", tot:5000, pag:5000, chi:"comune", note:"contanti 1370 + 600 compagna + 3030 Marco"},
-    {n:"Mobile su misura - anticipo", tot:1500, pag:1500, chi:"Marco", note:"anticipo versato"},
-    {n:"Speediance", tot:4000, pag:4000, chi:"Marco", note:"pagato in unica soluzione"},
-    {n:"Mobile su misura - saldo", tot:5000, pag:0, chi:"Marco", note:"a rate con l'amico"}
-  ], rata:400, start:9, extra:1000, liquidita:9000}, budget:{...DEFAULT_BUDGET}, cushion:{tr:200, cc:12323, imp:10500, soglia:1800, goal:6000}};
+    S = freshState(); normalizeState();
     renderAll(); scheduleSave();
   });
   window.addEventListener('resize',renderCushion);
@@ -744,13 +887,15 @@ async function bootFromLinkedFile(){
   try{
     const hnd = await HDB.get();
     if(!hnd) return false;
-    if(!(await ensurePerm(hnd, true))) return false; // l'utente deve ri-autorizzare (1 click)
+    if(!(await ensurePerm(hnd, true))){ // l'utente deve ri-autorizzare (1 click)
+      window.__linkedPending = true;
+      return false;
+    }
     const j = await readHandleData(hnd);
     fileHandle = hnd;
     if(j){
       S = j;
-      S.overrides=S.overrides||{}; S.ppOv=S.ppOv||{}; S.userRules=S.userRules||[];
-      S.customCats=S.customCats||[]; S.cash=S.cash||[]; S.budget=S.budget||{...DEFAULT_BUDGET};
+      if(normalizeState()) scheduleSave();
       const el=document.getElementById('linkstate');
       if(el) el.textContent="\u2713 dati dal file collegato: "+hnd.name;
       return true;
@@ -769,6 +914,7 @@ async function bootFromLinkedFile(){
   document.getElementById('app').style.display='block';
   bind();
   renderAll();
+  if(window.__linkedPending){ const el=document.getElementById('linkstate'); if(el) el.textContent="\u26a0 file collegato NON autorizzato: le modifiche vanno solo nel browser. Clicca 'Riapri file collegato'."; }
 })();
 
 
